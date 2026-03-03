@@ -39,3 +39,12 @@
 | Alle API-Requests hängen (ReadTimeout) | `Mutex`-Deadlock: `insert_thought` hielt Lock, rief `get_thought` auf das erneut lockt | Statische interne Methoden die `&Connection` direkt nehmen statt `self.conn.lock()` |
 | PyTorch CUDA Downloads dauern ewig | `sentence-transformers` zieht ~4GB nvidia-* Pakete | `--extra-index-url https://download.pytorch.org/whl/cpu` in requirements.txt |
 | `podman compose up --build` nutzt altes Image | Compose cached Images aggressiv | `podman build` separat, dann `podman stop/rm/compose up` |
+
+# Lessons Learned — Phase 2
+
+## Allgemein & Tooling
+
+| Problem | Root Cause | Lösung |
+|---------|-----------|--------|
+| Test-Timeouts bei Fallback-Logik in TDD | Wenn die primäre API (LM Studio) down ist, summieren sich Verbindungs-Timeouts auf, was zu failing Tests (`httpx.ReadTimeout`) führt. | Für `dev-container` Tests den primären Endpunkt (`EMBEDDING_URL=""`) explizit deaktivieren, um sofort den lokalen Fallback zu nutzen. |
+| Rad neu erfinden vermeiden | MCP in Rust via SSE und JSON-RPC manuell zu bauen ist aufwendig | Vorab-Analyse des Ökosystems zeigte fertige Crates (`model-context-protocol`, `rust-mcp-sdk`). Immer *zuerst* OSS-Vorarbeit prüfen. |

@@ -10,6 +10,8 @@
 ## Entwicklungsmethodik
 
 - **TDD: Red → Green → Refactor** — Failing Test zuerst, dann minimale Implementierung, dann aufräumen.
+- **Commits erst nach dem Task** — Einen Commit gibt es nur, wenn ein Task (oder eine logische Einheit) vollständig umgesetzt ist und die Tests "Grün" sind.
+- **Bibliotheken prüfen** — *Zuerst* nachschauen, ob es fertige Crates oder Pakete gibt, bevor man komplexe Spezifikationen (wie MCP) selbst baut.
 - **Einfache, robuste Lösungen für den PoC** — Verfeinerung kommt später. YAGNI.
 - **Strikte Datentrennung** — `brain.db` nie im Repo. Synthetische Testdaten in `fixtures/` sind OK.
 

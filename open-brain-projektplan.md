@@ -373,12 +373,12 @@ class SearchResponse(BaseModel):
 ### Phase 2 — Retrieval (Woche 3)
 **Ziel:** Claude Desktop / Claude Code findet Gedanken via MCP.
 
-- [ ] `POST /api/search` (sqlite-vec KNN-Suche)
-- [ ] `GET /api/stats`
+- [x] `POST /api/search` (sqlite-vec KNN-Suche)
+- [x] `GET /api/stats`
 - [ ] MCP Server (`/mcp`, JSON-RPC 2.0, Streamable HTTP)
 - [ ] 4 MCP Tools: `brain_capture_thought`, `brain_search`, `brain_list_recent`, `brain_get_stats`
 - [ ] MCP Tool Annotations (readOnly, destructive Hints)
-- [ ] `brain-cli`: `brain search "query"`, `brain stats`
+- [x] `brain-cli`: `brain search "query"`, `brain stats`
 - [ ] Python-Tests: MCP JSON-RPC direkt testen
 
 **Deliverable:** Claude Desktop MCP-Config funktioniert, semantische Suche liefert Ergebnisse.
