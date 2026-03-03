@@ -21,6 +21,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/health", get(health_handler))
         .route("/api/thoughts", post(create_thought).get(list_thoughts))
         .route("/api/thoughts/{id}", get(get_thought).delete(delete_thought))
+        .route("/api/search", post(search_thoughts))
         .with_state(state)
 }
 
@@ -41,9 +42,41 @@ async fn create_thought(
     if body.content.is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
-    let thought = state.db.insert_thought(&body.content, &body.tags)
+    
+    // Save to DB first to get an ID
+    let mut thought = state.db.insert_thought(&body.content, &body.tags)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        
+    // Try to get embeddings in the background / inline
+    if let Ok(embed_res) = state.embeddings.embed(&body.content).await {
+        if state.db.set_embedding(thought.id, &embed_res.embedding).is_ok() {
+            thought.has_embedding = true;
+        }
+    }
+    
     Ok((StatusCode::CREATED, Json(thought)))
+}
+
+#[derive(serde::Deserialize)]
+pub struct SearchRequest {
+    pub query: String,
+    pub limit: i64,
+}
+
+async fn search_thoughts(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<SearchRequest>,
+) -> Result<Json<Vec<Thought>>, StatusCode> {
+    // Generate embedding for query
+    let embed_res = state.embeddings.embed(&body.query)
+        .await
+        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+        
+    // Search local Vector DB
+    let thoughts = state.db.search(&embed_res.embedding, body.limit)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        
+    Ok(Json(thoughts))
 }
 
 async fn list_thoughts(

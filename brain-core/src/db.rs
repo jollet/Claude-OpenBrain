@@ -15,7 +15,10 @@ impl Database {
         } else {
             Connection::open(path)?
         };
+        
+        unsafe { sqlite_vec::sqlite3_vec_init(); }
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
+        
         let db = Self { conn: Mutex::new(conn) };
         db.run_migrations()?;
         Ok(db)
@@ -40,6 +43,10 @@ impl Database {
                 PRIMARY KEY (thought_id, tag_id),
                 FOREIGN KEY (thought_id) REFERENCES thoughts(id) ON DELETE CASCADE,
                 FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+            );
+            CREATE VIRTUAL TABLE IF NOT EXISTS vec_thoughts USING vec0(
+                thought_id INTEGER PRIMARY KEY,
+                embedding float[384]
             );"
         )?;
         Ok(())
@@ -135,5 +142,56 @@ impl Database {
         let tags = stmt.query_map(params![thought_id], |row| row.get::<_, String>(0))?
             .collect::<std::result::Result<Vec<_>, _>>()?;
         Ok(tags)
+    }
+
+    pub fn set_embedding(&self, thought_id: i64, embedding: &[f32]) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        // Convert &[f32] to bytes for sqlite-vec
+        let embedding_bytes: Vec<u8> = embedding
+            .iter()
+            .flat_map(|&f| f.to_le_bytes())
+            .collect();
+
+        conn.execute(
+            "INSERT OR REPLACE INTO vec_thoughts (thought_id, embedding) VALUES (?1, ?2)",
+            params![thought_id, embedding_bytes],
+        )?;
+
+        conn.execute(
+            "UPDATE thoughts SET has_embedding = 1 WHERE id = ?1",
+            params![thought_id],
+        )?;
+
+        Ok(())
+    }
+
+    pub fn search(&self, embedding: &[f32], limit: i64) -> Result<Vec<Thought>> {
+        let conn = self.conn.lock().unwrap();
+        let embedding_bytes: Vec<u8> = embedding
+            .iter()
+            .flat_map(|&f| f.to_le_bytes())
+            .collect();
+
+        // KNN search via vec_thoughts using the custom MATCH operator
+        let mut stmt = conn.prepare(
+            "SELECT thought_id 
+             FROM vec_thoughts 
+             WHERE embedding MATCH ?1 AND k = ?2
+             ORDER BY distance"
+        )?;
+
+        let rows = stmt.query_map(params![embedding_bytes, limit], |row| {
+            row.get::<_, i64>(0)
+        })?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            let id = row?;
+            if let Ok(thought) = Self::read_thought_inner(&conn, id) {
+                results.push(thought);
+            }
+        }
+
+        Ok(results)
     }
 }

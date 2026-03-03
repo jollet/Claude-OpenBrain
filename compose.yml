@@ -16,7 +16,7 @@ services:
       BRAIN_HOST: "0.0.0.0"
       BRAIN_PORT: "3000"
       BRAIN_DB_PATH: "/data/brain.db"
-      EMBEDDING_URL: "${EMBEDDING_URL:-http://host.docker.internal:1234}"
+      EMBEDDING_URL: "${EMBEDDING_URL:-}"
       EMBEDDING_MODEL: "${EMBEDDING_MODEL:-nomic-embed-text-v1.5}"
       EMBEDDING_FALLBACK_URL: "http://embedding-fallback:8001"
       EMBEDDING_FALLBACK_ENABLED: "${EMBEDDING_FALLBACK_ENABLED:-true}"
