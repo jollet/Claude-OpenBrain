@@ -1,0 +1,78 @@
+use axum::{
+    Router,
+    Json,
+    extract::{Path, Query, State},
+    http::StatusCode,
+    routing::{get, post, delete},
+};
+use std::sync::Arc;
+
+use crate::db::Database;
+use crate::embeddings::EmbeddingClient;
+use crate::models::*;
+
+pub struct AppState {
+    pub db: Arc<Database>,
+    pub embeddings: Arc<EmbeddingClient>,
+}
+
+pub fn router(state: Arc<AppState>) -> Router {
+    Router::new()
+        .route("/health", get(health_handler))
+        .route("/api/thoughts", post(create_thought).get(list_thoughts))
+        .route("/api/thoughts/{id}", get(get_thought).delete(delete_thought))
+        .with_state(state)
+}
+
+async fn health_handler(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
+    let backend = state.embeddings.active_backend().await;
+    Json(HealthResponse {
+        status: if state.db.is_healthy() { "ok".into() } else { "degraded".into() },
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        db_healthy: state.db.is_healthy(),
+        embedding_backend: backend,
+    })
+}
+
+async fn create_thought(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<CreateThought>,
+) -> Result<(StatusCode, Json<Thought>), StatusCode> {
+    if body.content.is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let thought = state.db.insert_thought(&body.content, &body.tags)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok((StatusCode::CREATED, Json(thought)))
+}
+
+async fn list_thoughts(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<ListParams>,
+) -> Result<Json<Vec<Thought>>, StatusCode> {
+    let limit = params.limit.unwrap_or(20);
+    let offset = params.offset.unwrap_or(0);
+    let thoughts = state.db.list_thoughts(limit, offset)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(thoughts))
+}
+
+async fn get_thought(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+) -> Result<Json<Thought>, StatusCode> {
+    state.db.get_thought(id)
+        .map(Json)
+        .map_err(|_| StatusCode::NOT_FOUND)
+}
+
+async fn delete_thought(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+) -> StatusCode {
+    match state.db.delete_thought(id) {
+        Ok(true) => StatusCode::NO_CONTENT,
+        Ok(false) => StatusCode::NOT_FOUND,
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}

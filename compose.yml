@@ -1,0 +1,87 @@
+name: open-brain
+
+services:
+  brain-core:
+    build:
+      context: .
+      dockerfile: brain-core/Dockerfile
+    image: open-brain/brain-core:latest
+    container_name: brain-core
+    restart: unless-stopped
+    ports:
+      - "${BRAIN_HOST:-127.0.0.1}:${BRAIN_PORT:-3000}:3000"
+    volumes:
+      - brain-data:/data
+    environment:
+      BRAIN_HOST: "0.0.0.0"
+      BRAIN_PORT: "3000"
+      BRAIN_DB_PATH: "/data/brain.db"
+      EMBEDDING_URL: "${EMBEDDING_URL:-http://host.docker.internal:1234}"
+      EMBEDDING_MODEL: "${EMBEDDING_MODEL:-nomic-embed-text-v1.5}"
+      EMBEDDING_FALLBACK_URL: "http://embedding-fallback:8001"
+      EMBEDDING_FALLBACK_ENABLED: "${EMBEDDING_FALLBACK_ENABLED:-true}"
+      MCP_ACCESS_KEY: "${MCP_ACCESS_KEY:?MCP_ACCESS_KEY muss in .env gesetzt sein}"
+      RUST_LOG: "${RUST_LOG:-brain_core=info}"
+    depends_on:
+      embedding-fallback:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+
+  embedding-fallback:
+    build:
+      context: embedding-fallback
+    image: open-brain/embedding-fallback:latest
+    container_name: embedding-fallback
+    restart: unless-stopped
+    # Port nur intern — nicht nach außen exponiert
+    expose:
+      - "8001"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/health')\""]
+      interval: 30s
+      timeout: 10s
+      start_period: 120s   # Modell-Download beim ersten Start
+      retries: 5
+
+  brain-ui:
+    build:
+      context: brain-ui
+    image: open-brain/brain-ui:latest
+    container_name: brain-ui
+    restart: unless-stopped
+    ports:
+      - "${BRAIN_UI_HOST:-127.0.0.1}:${BRAIN_UI_PORT:-8080}:80"
+    environment:
+      BRAIN_API_URL: "http://brain-core:3000"
+    depends_on:
+      brain-core:
+        condition: service_healthy
+
+  # TDD-Container — nur für Tests, nicht in Produktion
+  dev-container:
+    build:
+      context: dev-container
+    image: open-brain/dev-container:latest
+    container_name: dev-container
+    profiles:
+      - test   # Nur mit: podman compose --profile test up dev-container
+    environment:
+      BRAIN_API_URL: "http://brain-core:3000"
+      MCP_ACCESS_KEY: "${MCP_ACCESS_KEY}"
+    depends_on:
+      brain-core:
+        condition: service_healthy
+
+volumes:
+  brain-data:
+    # Lokales Volume — niemals im Repo
+    driver: local
+
+networks:
+  default:
+    name: open-brain-net

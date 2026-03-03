@@ -1,0 +1,11 @@
+/target
+/data
+.env
+compose.override.yml
+*.log
+.DS_Store
+__pycache__/
+*.pyc
+.pytest_cache/
+superpowers-antigravity/
+test_output.txt

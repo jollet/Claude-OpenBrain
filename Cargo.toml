@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "brain-core",
+    "brain-cli",
+]
+resolver = "2"
