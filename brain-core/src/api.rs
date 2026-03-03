@@ -22,6 +22,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/thoughts", post(create_thought).get(list_thoughts))
         .route("/api/thoughts/{id}", get(get_thought).delete(delete_thought))
         .route("/api/search", post(search_thoughts))
+        .route("/api/stats", get(stats_handler))
         .with_state(state)
 }
 
@@ -33,6 +34,12 @@ async fn health_handler(State(state): State<Arc<AppState>>) -> Json<HealthRespon
         db_healthy: state.db.is_healthy(),
         embedding_backend: backend,
     })
+}
+
+async fn stats_handler(State(state): State<Arc<AppState>>) -> Result<Json<serde_json::Value>, StatusCode> {
+    state.db.get_stats()
+        .map(Json)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
 async fn create_thought(

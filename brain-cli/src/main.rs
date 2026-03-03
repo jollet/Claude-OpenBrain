@@ -43,6 +43,16 @@ enum Commands {
         /// Thought ID
         id: i64,
     },
+    /// Search for thoughts using semantic vector search
+    Search {
+        /// The query string to search for
+        query: String,
+        /// Maximum number of results to return
+        #[arg(short, long, default_value = "10")]
+        limit: i64,
+    },
+    /// Show statistics about the data
+    Stats,
     /// Show server health
     Health,
 }
@@ -51,6 +61,12 @@ enum Commands {
 struct CreateRequest {
     content: String,
     tags: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct SearchRequest {
+    query: String,
+    limit: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -133,6 +149,44 @@ fn main() -> Result<()> {
                 println!("✓ Thought #{} deleted.", id);
             } else {
                 eprintln!("✗ Thought #{} not found.", id);
+            }
+        }
+        Commands::Search { query, limit } => {
+            let resp = client
+                .post(format!("{}/api/search", cli.api_url))
+                .json(&SearchRequest { query: query.clone(), limit })
+                .send()?;
+            if resp.status().is_success() {
+                let thoughts: Vec<Thought> = resp.json()?;
+                if thoughts.is_empty() {
+                    println!("No semantic matches found for '{}'.", query);
+                } else {
+                    println!("Search results for '{}':", query);
+                    for t in &thoughts {
+                        let tags = if t.tags.is_empty() {
+                            String::new()
+                        } else {
+                            format!(" [{}]", t.tags.join(", "))
+                        };
+                        println!("#{} {}{}", t.id, t.content, tags);
+                    }
+                }
+            } else {
+                eprintln!("✗ Error performing search: {}", resp.status());
+            }
+        }
+        Commands::Stats => {
+            let resp = client
+                .get(format!("{}/api/stats", cli.api_url))
+                .send()?;
+            if resp.status().is_success() {
+                let stats: serde_json::Value = resp.json()?;
+                println!("--- Brain Stats ---");
+                println!("Total thoughts: {}", stats["total_thoughts"]);
+                println!("Indexed with embeddings: {}", stats["thoughts_with_embeddings"]);
+                println!("Total tags: {}", stats["total_tags"]);
+            } else {
+                eprintln!("✗ Error retrieving stats: {}", resp.status());
             }
         }
         Commands::Health => {

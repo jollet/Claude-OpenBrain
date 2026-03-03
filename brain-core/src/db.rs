@@ -57,6 +57,19 @@ impl Database {
         conn.execute_batch("SELECT 1").is_ok()
     }
 
+    pub fn get_stats(&self) -> Result<serde_json::Value> {
+        let conn = self.conn.lock().unwrap();
+        let total_thoughts: i64 = conn.query_row("SELECT COUNT(*) FROM thoughts", [], |row| row.get(0))?;
+        let thoughts_with_embeddings: i64 = conn.query_row("SELECT COUNT(*) FROM thoughts WHERE has_embedding = 1", [], |row| row.get(0))?;
+        let total_tags: i64 = conn.query_row("SELECT COUNT(*) FROM tags", [], |row| row.get(0))?;
+        
+        Ok(serde_json::json!({
+            "total_thoughts": total_thoughts,
+            "thoughts_with_embeddings": thoughts_with_embeddings,
+            "total_tags": total_tags,
+        }))
+    }
+
     pub fn insert_thought(&self, content: &str, tags: &[String]) -> Result<Thought> {
         let conn = self.conn.lock().unwrap();
         conn.execute("INSERT INTO thoughts (content) VALUES (?1)", params![content])?;
